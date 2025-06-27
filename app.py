@@ -9,8 +9,8 @@ def index():
     return render_template('index.html')
 
 connect = sqlite3.connect('inventory.db')
-connect.execute('CREATE TABLE IF NOT EXISTS ITEMS (name TEXT,description TEXT,'
-                ' quantity INTEGER, price REAL)')
+connect.execute('CREATE TABLE IF NOT EXISTS INVENTORY (name TEXT,description TEXT, \
+                 quantity INTEGER, price REAL)')
 
 @app.route('/add', methods=['GET', 'POST'])
 def add():
@@ -21,8 +21,8 @@ def add():
         price = float(request.form['price'])
         with sqlite3.connect('inventory.db') as items:
             cursor = items.cursor()
-            cursor.execute('INSERT INTO ITEM (name, description, quantity, price)'
-                           'VALUES (?, ?, ?)', (name, quantity, price))
+            cursor.execute('INSERT INTO INVENTORY (name, description, quantity, price) \
+                           VALUES (?, ?, ?, ?)', (name, description, quantity, price))
             items.commit()
         return render_template('index.html')
     else:
@@ -32,7 +32,7 @@ def add():
 def inventory():
     connect = sqlite3.connect('inventory.db')
     cursor = connect.cursor()
-    cursor.execute('SELECT * FROM ITEMS')
+    cursor.execute('SELECT * FROM INVENTORY')
     data = cursor.fetchall()
     return render_template('inventory.html', data=data)
 
