@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS INVENTORY(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    image BLOB,
+    description TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    price REAL NOT NULL
+);
