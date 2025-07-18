@@ -31,12 +31,12 @@ def convert_to_binary(filename):
 # Takes the database table and downloads a xml file to the users computer
 @app.route('/xml-export')
 def inventory_to_xml():
-    connnection = sqlite3.connect('inventory.db')
-    cursor = connnection.cursor()
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
     cursor.execute('SELECT name, image, description, quantity, price FROM inventory')
     # Stores all the rows of the database
     rows = cursor.fetchall()
-    connnection.close()
+    connection.close()
 
     '''
     Creates a tree and creates a child node (item) for each item and then adds a child node (characteristics [name,
