@@ -9,9 +9,15 @@
         }
         </style>
     <body>
+        <h1>Inventory to xml file</h1>
+        <form action="{{url_for('inventory_to_xml')}}" method="get">
+            <button type="submit">Export to XML</button>
+        </form>
+        <br/>
         <table style="width:100%">
             <tr>
               <th>Name</th>
+              <th>Image</th>
               <th>Description</th>
               <th>Quantity</th>
               <th>Price</th>
@@ -19,9 +25,16 @@
             {%for item in data%}
                <tr>
                  <td>{{item[0]}}</td>
-                 <td>{{item[1]}}</td>
+                 <td>
+                  {% if item[1] %}
+                    <img src="{{item[1]}}" alt="Image" style="max-height:100px;">
+                  {% else %}
+                    No image
+                  {% endif %}
+                </td>
                  <td>{{item[2]}}</td>
                  <td>{{item[3]}}</td>
+                 <td>{{item[4]}}</td>
                 </tr>
             {%endfor%}
           </table>          

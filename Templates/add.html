@@ -5,15 +5,22 @@
     </head>
     <body>
         <h1>Add item:</h1>
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <label>Enter Name:</label>
-            <input type="name" name="name" placeholder="Enter item name" required><br/>
+            <input type="text" name="name" placeholder="Enter item name" required><br/>
+
+            <label>Upload image (optional):</label>
+            <input type="file" name="image"><br/>
+
             <label>Enter Description:</label>
-            <input type="name" name="description" placeholder="Enter item description" required><br/>
+            <input type="text" name="description" placeholder="Enter item description" required><br/>
+
             <label>Enter Quantity:</label>
             <input type="number" name="quantity" placeholder="Enter item quantity" required><br/>
+
             <label>Enter Price:</label>
             <input type="number" name="price" placeholder="Enter item price" step="0.01" required><br/>
+
             <input type = "submit" value = "submit"/><br/>
         </form>
     </body>
