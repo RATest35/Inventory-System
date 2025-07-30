@@ -1,46 +1,42 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Store Inventory</title>
+    <head>
+        <title>Store Inventory</title>
+    </head>
     <style>
         table, th, td {
-            border: 1px solid black;
+          border:1px solid black;
         }
-    </style>
-</head>
-<body>
-    <h1>Inventory to XML File</h1>
-    <form action="{{ url_for('inventory_to_xml') }}" method="get">
-        <button type="submit">Export to XML</button>
-    </form>
-    <br/>
-    <table style="width:100%">
-        <tr>
-            <th>Name</th>
-            <th>Image</th>
-            <th>Description</th>
-            <th>Quantity</th>
-            <th>Price</th>
-            <th>Action</th> <!-- New column for editing -->
-        </tr>
-        {% for item in data %}
-        <tr>
-            <td>{{ item[0] }}</td>
-            <td>
-                {% if item[1] %}
-                    <img src="{{ item[1] }}" alt="Image" style="max-height:100px;">
-                {% else %}
+        </style>
+    <body>
+        <h1>Inventory to xml file</h1>
+        <form action="{{url_for('inventory_to_xml')}}" method="get">
+            <button type="submit">Export to XML</button>
+        </form>
+        <br/>
+        <table style="width:100%">
+            <tr>
+              <th>Name</th>
+              <th>Image</th>
+              <th>Description</th>
+              <th>Quantity</th>
+              <th>Price</th>
+            </tr>
+            {%for item in data%}
+               <tr>
+                 <td>{{item[0]}}</td>
+                 <td>
+                  {% if item[1] %}
+                    <img src="{{item[1]}}" alt="Image" style="max-height:100px;">
+                  {% else %}
                     No image
-                {% endif %}
-            </td>
-            <td>{{ item[2] }}</td>
-            <td>{{ item[3] }}</td>
-            <td>{{ item[4] }}</td>
-            <td>
-                <a href="{{ url_for('edit_quantity', name=item[0]) }}">Edit Quantity</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
-</body>
+                  {% endif %}
+                </td>
+                 <td>{{item[2]}}</td>
+                 <td>{{item[3]}}</td>
+                 <td>{{item[4]}}</td>
+                </tr>
+            {%endfor%}
+          </table>
+    </body>
 </html>
