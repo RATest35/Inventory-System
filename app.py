@@ -56,6 +56,7 @@ def convert_to_binary(filename):
 
 # Takes the database table and downloads a xml file to the users computer
 @app.route('/xml-export')
+@login_required
 def inventory_to_xml():
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
@@ -102,6 +103,7 @@ def inventory_to_xml():
 
 
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add():
     if request.method == 'POST':
         name = request.form['name']
