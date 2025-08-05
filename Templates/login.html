@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Enter your user name and password</title>
+</head>
+    <body>
+        <h1>Login:</h1>
+            <form method="POST" enctype="multipart/form-data">
+                <label>Enter Username:</label>
+                <input type="text" name="username" placeholder="Enter username" required><br/>
+
+                <label>Enter Password:</label>
+                <input type="password" name="user_password" placeholder="Enter password" required><br/>
+
+                <input type="submit" value="Login">
+            </form>
+        <button class="btn" type="button" onclick="window.location.href='{{ url_for('register') }}';">Register account
+        </button><br/>
+    </body>
+</html>
