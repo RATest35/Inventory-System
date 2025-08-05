@@ -1,24 +1,50 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, session
 import sqlite3
 import os
 import base64
 import xml.etree.ElementTree as ET
 import io
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 
 app = Flask(__name__)
+app.secret_key = 'secret_key'
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
-
-@app.route('/')
-@app.route('/home')
-def index():
-    return render_template('index.html')
-
-
-# Function to connect the database
-def init_database():
-    with sqlite3.connect('inventory.db') as connection:
-        with open('inventory_schema.sql') as f:
+def init_database(database_name):
+    with sqlite3.connect(f'{database_name}.db') as connection:
+        with open(f'{database_name}_schema.sql') as f:
             connection.executescript(f.read())
+
+class User(UserMixin):
+    def __init__(self, user_id, username, user_password, store_name):
+        self.id = user_id
+        self.username = username
+        self.user_password = user_password
+        self.store_name = store_name
+
+    @staticmethod
+    def get(user_id):
+        connection = sqlite3.connect('users.db')
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        user = cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+        if user is None:
+            return None
+        else:
+            return User(user['user_id'], user['username'], user['user_password'], user['store_name'])
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(int(user_id))
+
+
+@app.route('/home')
+def home():
+    return render_template('home.html')
 
 
 # Converts a file to binary
@@ -33,7 +59,8 @@ def convert_to_binary(filename):
 def inventory_to_xml():
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
-    cursor.execute('SELECT name, image, description, quantity, price FROM inventory')
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
     # Stores all the rows of the database
     rows = cursor.fetchall()
     connection.close()
@@ -96,20 +123,24 @@ def add():
 
         with sqlite3.connect('inventory.db') as items:
             cursor = items.cursor()
-            cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price) \
-                           VALUES (?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price))
+            cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) \
+                           VALUES (?, ?, ?, ?, ?, ?)',
+                           (name, image_blob, description, quantity, price, current_user.id))
             items.commit()
-        return render_template('index.html')
+        return render_template('home.html')
     else:
         return render_template('add.html')
 
 
 @app.route('/inventory')
+@login_required
 def inventory():
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT name, image, description, quantity, price FROM inventory')
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
     rows = cursor.fetchall()
+    connection.close()
 
     data = []
     for row in rows:
@@ -124,7 +155,54 @@ def inventory():
 
     return render_template('inventory.html', data=data)
 
+@app.route('/',  methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        user_password = request.form['user_password']
+        connection = sqlite3.connect('users.db')
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        user_row = cursor.execute('SELECT * FROM USERS WHERE username = ?', (username,)).fetchone()
+        connection.close()
+        if user_row and check_password_hash(user_row['user_password'], user_password):
+            user = User(user_row['user_id'], user_row['username'], user_row['user_password'], user_row['store_name'])
+            login_user(user)
+            return render_template('home.html')
+        else:
+            return render_template('login.html')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        user_password = generate_password_hash(request.form['user_password'])
+        store_name = request.form['store_name']
+        connection = sqlite3.connect('users.db')
+        cursor = connection.cursor()
+        user_info = cursor.execute('SELECT * FROM USERS WHERE username=? AND user_password=?',
+                                   (username, user_password)).fetchone()
+        if user_info:
+            return render_template('register.html')
+        else:
+            cursor.execute('INSERT INTO USERS (username, user_password, store_name) VALUES (?, ?, ?)',
+                           (username, user_password, store_name))
+            connection.commit()
+            connection.close()
+            return render_template('login.html')
+    return render_template('register.html')
+
 
 if __name__ == '__main__':
-    init_database()
+    init_database('users')
+    init_database('inventory')
     app.run(debug=True)
