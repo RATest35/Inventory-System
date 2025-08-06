@@ -13,11 +13,14 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Changed to support both databases
 def init_database(database_name):
     with sqlite3.connect(f'{database_name}.db') as connection:
         with open(f'{database_name}_schema.sql') as f:
             connection.executescript(f.read())
 
+# User class to support flask-login.
+# Stores the values from the database in the class.
 class User(UserMixin):
     def __init__(self, user_id, username, user_password, store_name):
         self.id = user_id
@@ -25,6 +28,7 @@ class User(UserMixin):
         self.user_password = user_password
         self.store_name = store_name
 
+    # Function returns a User class with the values stored in the user database
     @staticmethod
     def get(user_id):
         connection = sqlite3.connect('users.db')
@@ -157,6 +161,8 @@ def inventory():
 
     return render_template('inventory.html', data=data)
 
+# New main page. Checks user database to see if login information exists.
+# If login information exists moves to the home page and creates a user class
 @app.route('/',  methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -182,7 +188,8 @@ def logout():
     logout_user()
     return render_template('login.html')
 
-
+# Users are able to register new accounts. Usernames have to be unique and passwords are stored as a hashed password.
+# New users are stored in the database and are able to log in.
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
