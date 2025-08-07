@@ -211,6 +211,33 @@ def register():
     return render_template('register.html')
 
 
+# Adam created this function
+# If the users tries to update the value a sql query is made updating the value in the database.
+# If a get request is sent the edit_quantity html is rendered and the item name and quantity stored in the database
+# is displayed.
+@app.route('/edit/<string:name>', methods=['GET', 'POST'])
+def edit_quantity(name):
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+        new_quantity = int(request.form['quantity'])
+        cursor.execute('UPDATE inventory SET quantity = ? WHERE name = ?', (new_quantity, name))
+        conn.commit()
+        conn.close()
+        return render_template('index.html')  # Or use redirect(url_for('inventory'))
+
+    # GET request
+    cursor.execute('SELECT quantity FROM inventory WHERE name = ?', (name,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        current_quantity = row[0]
+        return render_template('edit_quantity.html', name=name, quantity=current_quantity)
+    else:
+        return "Item not found", 404
+
 if __name__ == '__main__':
     init_database('users')
     init_database('inventory')
