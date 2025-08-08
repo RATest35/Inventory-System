@@ -4,21 +4,52 @@ import os
 import base64
 import xml.etree.ElementTree as ET
 import io
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
-@app.route('/')
-@app.route('/home')
-def index():
-    return render_template('index.html')
-
-
-# Function to connect the database
-def init_database():
-    with sqlite3.connect('inventory.db') as connection:
-        with open('inventory_schema.sql') as f:
+# Changed to support both databases
+def init_database(database_name):
+    with sqlite3.connect(f'{database_name}.db') as connection:
+        with open(f'{database_name}_schema.sql') as f:
             connection.executescript(f.read())
+
+# User class to support flask-login.
+# Stores the values from the database in the class.
+class User(UserMixin):
+    def __init__(self, user_id, username, user_password, store_name):
+        self.id = user_id
+        self.username = username
+        self.user_password = user_password
+        self.store_name = store_name
+
+
+    # Function returns a User class with the values stored in the user database
+    @staticmethod
+    def get(user_id):
+        connection = sqlite3.connect('users.db')
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        user = cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+        if user is None:
+            return None
+        else:
+            return User(user['user_id'], user['username'], user['user_password'], user['store_name'])
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(int(user_id))
+
+
+@app.route('/home')
+def home():
+    return render_template('home.html')
 
 
 # Converts a file to binary
@@ -30,10 +61,12 @@ def convert_to_binary(filename):
 
 # Takes the database table and downloads a xml file to the users computer
 @app.route('/xml-export')
+@login_required
 def inventory_to_xml():
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
-    cursor.execute('SELECT name, image, description, quantity, price FROM inventory')
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
     # Stores all the rows of the database
     rows = cursor.fetchall()
     connection.close()
@@ -75,6 +108,7 @@ def inventory_to_xml():
 
 
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add():
     if request.method == 'POST':
         name = request.form['name']
@@ -84,7 +118,7 @@ def add():
         price = float(request.form['price'])
         #
         image_blob = None
-        
+
         if image_file and image_file.filename != '':
             # Temporarily save the file to read it as binary
             temp_folder = 'temp'
@@ -109,11 +143,14 @@ def add():
 
 
 @app.route('/inventory')
+@login_required
 def inventory():
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT name, image, description, quantity, price FROM inventory')
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
     rows = cursor.fetchall()
+    connection.close()
 
     data = []
     for row in rows:
@@ -127,6 +164,55 @@ def inventory():
         data.append((name, image_uri, description, quantity, price))
 
     return render_template('inventory.html', data=data)
+
+# New main page. Checks user database to see if login information exists.
+# If login information exists moves to the home page and creates a user class
+@app.route('/',  methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        user_password = request.form['user_password']
+        connection = sqlite3.connect('users.db')
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        user_row = cursor.execute('SELECT * FROM USERS WHERE username = ?', (username,)).fetchone()
+        connection.close()
+        if user_row and check_password_hash(user_row['user_password'], user_password):
+            user = User(user_row['user_id'], user_row['username'], user_row['user_password'], user_row['store_name'])
+            login_user(user)
+            return render_template('home.html')
+        else:
+            return render_template('login.html')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return render_template('login.html')
+
+# Users are able to register new accounts. Usernames have to be unique and passwords are stored as a hashed password.
+# New users are stored in the database and are able to log in.
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        user_password = generate_password_hash(request.form['user_password'])
+        store_name = request.form['store_name']
+        connection = sqlite3.connect('users.db')
+        cursor = connection.cursor()
+        user_info = cursor.execute('SELECT * FROM USERS WHERE username=? AND user_password=?',
+                                   (username, user_password)).fetchone()
+        if user_info:
+            return render_template('register.html')
+        else:
+            cursor.execute('INSERT INTO USERS (username, user_password, store_name) VALUES (?, ?, ?)',
+                           (username, user_password, store_name))
+            connection.commit()
+            connection.close()
+            return render_template('login.html')
+    return render_template('register.html')
 
 
 # Adam created this function
@@ -157,5 +243,6 @@ def edit_quantity(name):
         return "Item not found", 404
 
 if __name__ == '__main__':
-    init_database()
+    init_database('users')
+    init_database('inventory')
     app.run(debug=True)
