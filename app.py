@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, session
+from flask import Flask, render_template, request, send_file, flash
 import sqlite3
 import os
 import base64
@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 
 app = Flask(__name__)
-app.secret_key = 'secret_key'
+app.secret_key = os.urandom(12)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -27,6 +27,7 @@ class User(UserMixin):
         self.username = username
         self.user_password = user_password
         self.store_name = store_name
+
 
     # Function returns a User class with the values stored in the user database
     @staticmethod
@@ -117,6 +118,7 @@ def add():
         price = float(request.form['price'])
         #
         image_blob = None
+
         if image_file and image_file.filename != '':
             # Temporarily save the file to read it as binary
             temp_folder = 'temp'
@@ -126,14 +128,16 @@ def add():
             image_file.save(temp_path)
             image_blob = convert_to_binary(temp_path)
             os.remove(temp_path)
-
-        with sqlite3.connect('inventory.db') as items:
-            cursor = items.cursor()
-            cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) \
-                           VALUES (?, ?, ?, ?, ?, ?)',
-                           (name, image_blob, description, quantity, price, current_user.id))
-            items.commit()
-        return render_template('home.html')
+        try:
+            with sqlite3.connect('inventory.db') as items:
+                cursor = items.cursor()
+                cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price) \
+                            VALUES (?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price))
+                items.commit()
+            return render_template('index.html')
+        except sqlite3.IntegrityError:
+            flash("Item already found in inventory. Please change the name.");
+            return render_template("add.html");
     else:
         return render_template('add.html')
 
