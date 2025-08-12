@@ -106,6 +106,48 @@ def inventory_to_xml():
 
     return send_file(output_xml, mimetype='application/xml', as_attachment=True, download_name='inventory.xml')
 
+# XLSX Export
+from openpyxl import Workbook
+
+@app.route('/xlsx-export')
+@login_required
+def inventory_to_xlsx():
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
+    rows = cursor.fetchall()
+    connection.close()
+
+    # Create a new Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventory"
+
+    # Write headers
+    headers = ["Name", "Image (Base64)", "Description", "Quantity", "Price"]
+    ws.append(headers)
+
+    # Write each row
+    for name, image_blob, description, quantity, price in rows:
+        if image_blob:
+            image_base64 = base64.b64encode(image_blob).decode('utf-8')
+        else:
+            image_base64 = ''
+        ws.append([name, image_base64, description, quantity, f'{price:.2f}'])
+
+    # Save to BytesIO for sending
+    output_xlsx = io.BytesIO()
+    wb.save(output_xlsx)
+    output_xlsx.seek(0)
+
+    return send_file(
+        output_xlsx,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='inventory.xlsx'
+    )
+
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
