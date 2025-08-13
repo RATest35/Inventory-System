@@ -7,15 +7,15 @@ import filecmp
 app.init_database()
 
 
-def add_inventory_item(name, description, quantity, price, image_path=None):
+def add_inventory_item(name, description, quantity, price, image_path=None, owner_id):
     image_blob = None
     if image_path and os.path.exists(image_path):
         image_blob = app.convert_to_binary(image_path)
     with sqlite3.connect('inventory.db') as conn:
         cursor = conn.cursor()
-        cursor.execute('''INSERT INTO INVENTORY (name, image, description, quantity, price)
+        cursor.execute('''INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id)
                           VALUES (?, ?, ?, ?, ?)''',
-                       (name, image_blob, description, quantity, price))
+                       (name, image_blob, description, quantity, price, owner_id))
         conn.commit()
 
 def update_inventory_item_quantity(name, new_quantity):
@@ -27,17 +27,17 @@ def update_inventory_item_quantity(name, new_quantity):
 
 class MyTestCase(unittest.TestCase):
     def test_1(self):
-        add_inventory_item("Water", "Bottled", 5, 1)
+        add_inventory_item("Water", "Bottled", 5, 1, 1)
         self.assertTrue(filecmp.cmp('inventory.db', 'inventoryCheck1.db', shallow=False))
 
 
     def test_2(self):
-        add_inventory_item("Apples", "By the pound", 10, 2, "apples.png")
+        add_inventory_item("Apples", "By the pound", 10, 2, "apples.png",1)
         self.assertTrue(filecmp.cmp('inventory.db', 'inventoryCheck2.db', shallow=False))
 
 
     def test_3(self):
-        add_inventory_item("Coca Cola", "Normal Flavor, 12oz, Canned", 60, 0.5)
+        add_inventory_item("Coca Cola", "Normal Flavor, 12oz, Canned", 60, 0.5, 2)
         self.assertTrue(filecmp.cmp('inventory.db', 'inventoryCheck3.db', shallow=False))
 
 
