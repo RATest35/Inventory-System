@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+    <head>Low Stock</head>
+    <style>
+        table, th, td {
+            border:1px solid black;
+        }
+    </style>
+    <body>
+
+        <!--Low stock <= 5 quantity -->
+        <h1>Low Stock:</h1>
+        <table style="width:100%">
+            <tr>
+              <th>Name</th>
+              <th>Image</th>
+              <th>Description</th>
+              <th>Quantity</th>
+              <th>Price</th>
+            </tr>
+            {%for item in lowStock%}
+               <tr>
+                 <td>{{item[0]}}</td>
+                 <td>
+                  {% if item[1] %}
+                    <img src="{{item[1]}}" alt="Image" style="max-height:100px;">
+                  {% else %}
+                    No image
+                  {% endif %}
+                </td>
+                 <td>{{item[2]}}</td>
+                 <td>{{item[3]}}</td>
+                 <td>{{item[4]}}</td>
+                </tr>
+            {%endfor%}
+        </table>
+
+        <!--Out of stock 0 quanitiy -->
+        <h1>Out of Stock:</h1>
+        <table style="width:100%">
+            <tr>
+              <th>Name</th>
+              <th>Image</th>
+              <th>Description</th>
+              <th>Quantity</th>
+              <th>Price</th>
+            </tr>
+            {%for item in outOfStock%}
+               <tr>
+                 <td>{{item[0]}}</td>
+                 <td>
+                  {% if item[1] %}
+                    <img src="{{item[1]}}" alt="Image" style="max-height:100px;">
+                  {% else %}
+                    No image
+                  {% endif %}
+                </td>
+                 <td>{{item[2]}}</td>
+                 <td>{{item[3]}}</td>
+                 <td>{{item[4]}}</td>
+                </tr>
+            {%endfor%}
+        </table>
+        <button class="btn" type="button" onclick="window.location.href='{{ url_for('home') }}';">Home</button><br/>
+    </body>
+</html>
