@@ -242,6 +242,33 @@ def edit_quantity(name):
     else:
         return "Item not found", 404
 
+@app.route('/low-stock')
+@login_required
+def low_stock():
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
+    rows = cursor.fetchall()
+    connection.close()
+    
+    lowStock = []
+    outOfStock = []
+    for row in rows:
+        name, image_blob, description, quantity, price = row
+        if image_blob:
+            image_base64 = base64.b64encode(image_blob).decode('utf-8')
+            image_uri = f"data:image/jpeg;base64,{image_base64}"
+        else:
+            image_uri = None  # or a default placeholder image path
+        
+        if row[3] == 0:
+            outOfStock.append((name, image_uri, description, quantity, price))
+        elif row[3] <= 10:
+            lowStock.append((name, image_uri, description, quantity, price))
+    
+    return render_template('low_stock.html', lowStock=lowStock, outOfStock=outOfStock)
+
 if __name__ == '__main__':
     init_database('users')
     init_database('inventory')
