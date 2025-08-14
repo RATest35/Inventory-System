@@ -131,10 +131,10 @@ def add():
         try:
             with sqlite3.connect('inventory.db') as items:
                 cursor = items.cursor()
-                cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price) \
-                            VALUES (?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price))
+                cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) \
+                            VALUES (?, ?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price, current_user.id))
                 items.commit()
-            return render_template('index.html')
+            return render_template('home.html')
         except sqlite3.IntegrityError:
             flash("Item already found in inventory. Please change the name.");
             return render_template("add.html");
@@ -229,7 +229,7 @@ def edit_quantity(name):
         cursor.execute('UPDATE inventory SET quantity = ? WHERE name = ?', (new_quantity, name))
         conn.commit()
         conn.close()
-        return render_template('index.html')  # Or use redirect(url_for('inventory'))
+        return render_template('home.html')  # Or use redirect(url_for('inventory'))
 
     # GET request
     cursor.execute('SELECT quantity FROM inventory WHERE name = ?', (name,))
