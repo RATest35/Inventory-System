@@ -108,6 +108,9 @@ def inventory_to_xml():
 
 # XLSX Export
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, PatternFill, Font
+import tempfile
 
 @app.route('/xlsx-export')
 @login_required
@@ -119,24 +122,56 @@ def inventory_to_xlsx():
     rows = cursor.fetchall()
     connection.close()
 
-    # Create a new Excel workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Inventory"
 
     # Write headers
-    headers = ["Name", "Image (Base64)", "Description", "Quantity", "Price"]
+    headers = ["Name", "Image", "Description", "Quantity", "Price"]
     ws.append(headers)
 
-    # Write each row
-    for name, image_blob, description, quantity, price in rows:
-        if image_blob:
-            image_base64 = base64.b64encode(image_blob).decode('utf-8')
-        else:
-            image_base64 = ''
-        ws.append([name, image_base64, description, quantity, f'{price:.2f}'])
+    # Style headers: bold, white text, blue fill, centered
+    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 25
 
-    # Save to BytesIO for sending
+    # Adjust column widths
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = 40
+    ws.column_dimensions["D"].width = 10
+    ws.column_dimensions["E"].width = 10
+
+    row_index = 2
+    for name, image_blob, description, quantity, price in rows:
+        ws.cell(row=row_index, column=1, value=name)
+        ws.cell(row=row_index, column=3, value=description)
+        ws.cell(row=row_index, column=4, value=quantity)
+        ws.cell(row=row_index, column=5, value=f'{price:.2f}')
+
+        # Center all text fields
+        for col_num in [1, 3, 4, 5]:
+            ws.cell(row=row_index, column=col_num).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.row_dimensions[row_index].height = 60  # for images
+
+        if image_blob:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            temp_file.write(image_blob)
+            temp_file.close()
+
+            img = XLImage(temp_file.name)
+            img.height = 60
+            img.width = 60
+            ws.add_image(img, f"B{row_index}")
+
+        row_index += 1
+
     output_xlsx = io.BytesIO()
     wb.save(output_xlsx)
     output_xlsx.seek(0)
