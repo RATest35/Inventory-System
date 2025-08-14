@@ -131,10 +131,10 @@ def add():
         try:
             with sqlite3.connect('inventory.db') as items:
                 cursor = items.cursor()
-                cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price) \
-                            VALUES (?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price))
+                cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) \
+                            VALUES (?, ?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price, current_user.id))
                 items.commit()
-            return render_template('index.html')
+            return render_template('home.html')
         except sqlite3.IntegrityError:
             flash("Item already found in inventory. Please change the name.");
             return render_template("add.html");
@@ -229,7 +229,7 @@ def edit_quantity(name):
         cursor.execute('UPDATE inventory SET quantity = ? WHERE name = ?', (new_quantity, name))
         conn.commit()
         conn.close()
-        return render_template('index.html')  # Or use redirect(url_for('inventory'))
+        return render_template('home.html')  # Or use redirect(url_for('inventory'))
 
     # GET request
     cursor.execute('SELECT quantity FROM inventory WHERE name = ?', (name,))
@@ -241,6 +241,33 @@ def edit_quantity(name):
         return render_template('edit_quantity.html', name=name, quantity=current_quantity)
     else:
         return "Item not found", 404
+
+@app.route('/low-stock')
+@login_required
+def low_stock():
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
+    rows = cursor.fetchall()
+    connection.close()
+    
+    lowStock = []
+    outOfStock = []
+    for row in rows:
+        name, image_blob, description, quantity, price = row
+        if image_blob:
+            image_base64 = base64.b64encode(image_blob).decode('utf-8')
+            image_uri = f"data:image/jpeg;base64,{image_base64}"
+        else:
+            image_uri = None  # or a default placeholder image path
+        
+        if row[3] == 0:
+            outOfStock.append((name, image_uri, description, quantity, price))
+        elif row[3] <= 10:
+            lowStock.append((name, image_uri, description, quantity, price))
+    
+    return render_template('low_stock.html', lowStock=lowStock, outOfStock=outOfStock)
 
 if __name__ == '__main__':
     init_database('users')
