@@ -6,6 +6,11 @@ import xml.etree.ElementTree as ET
 import io
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, PatternFill, Font
+import tempfile
+
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
@@ -105,6 +110,79 @@ def inventory_to_xml():
     output_xml.seek(0)
 
     return send_file(output_xml, mimetype='application/xml', as_attachment=True, download_name='inventory.xml')
+
+
+@app.route('/xlsx-export')
+@login_required
+def inventory_to_xlsx():
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
+    rows = cursor.fetchall()
+    connection.close()
+
+    # Create a new Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventory"
+
+    # Write headers
+    headers = ["Name", "Image", "Description", "Quantity", "Price"]
+    ws.append(headers)
+
+    # Style headers: bold, white text, blue fill, centered
+    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 25
+
+    # Adjust column widths
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = 40
+    ws.column_dimensions["D"].width = 10
+    ws.column_dimensions["E"].width = 10
+
+    row_index = 2
+    for name, image_blob, description, quantity, price in rows:
+        ws.cell(row=row_index, column=1, value=name)
+        ws.cell(row=row_index, column=3, value=description)
+        ws.cell(row=row_index, column=4, value=quantity)
+        ws.cell(row=row_index, column=5, value=f'{price:.2f}')
+
+        # Center all text fields
+        for col_num in [1, 3, 4, 5]:
+            ws.cell(row=row_index, column=col_num).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.row_dimensions[row_index].height = 60  # for images
+
+        if image_blob:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            temp_file.write(image_blob)
+            temp_file.close()
+
+            img = XLImage(temp_file.name)
+            img.height = 60
+            img.width = 60
+            ws.add_image(img, f"B{row_index}")
+
+        row_index += 1
+
+    output_xlsx = io.BytesIO()
+    wb.save(output_xlsx)
+    output_xlsx.seek(0)
+
+    return send_file(
+        output_xlsx,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='inventory.xlsx'
+    )
 
 
 @app.route('/add', methods=['GET', 'POST'])
