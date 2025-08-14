@@ -6,6 +6,11 @@ import xml.etree.ElementTree as ET
 import io
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, PatternFill, Font
+import tempfile
+
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
@@ -106,11 +111,6 @@ def inventory_to_xml():
 
     return send_file(output_xml, mimetype='application/xml', as_attachment=True, download_name='inventory.xml')
 
-# XLSX Export
-from openpyxl import Workbook
-from openpyxl.drawing.image import Image as XLImage
-from openpyxl.styles import Alignment, PatternFill, Font
-import tempfile
 
 @app.route('/xlsx-export')
 @login_required
@@ -122,6 +122,7 @@ def inventory_to_xlsx():
     rows = cursor.fetchall()
     connection.close()
 
+    # Create a new Excel workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Inventory"
