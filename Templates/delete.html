@@ -1,10 +1,71 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        Delete Item
-    </head>
-    <body>
-        <h3> Delete inventory item: </h3>
+<html lang="en">
+<head>
+<title>Business Inventory Home</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+/* Style the header */
+.header {
+  background-color: #B0C4DE;
+  padding: 20px;
+  text-align: center;
+}
+
+/* Style the top navigation bar */
+.topnav {
+  overflow: hidden;
+  background-color: #778899;
+}
+
+/* Style the topnav links */
+.topnav a {
+  float: left;
+  display: block;
+  color: #f2f2f2;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+}
+
+/* Change color on hover */
+.topnav a:hover {
+  background-color: #ddd;
+  color: black;
+}
+
+.content {
+  float: left;
+  width: 100%;
+  padding: 20px;
+  /* background-color: #D3D3D3; */
+}
+
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Business Inventory System</h1>
+</div>
+
+<div class="topnav">
+  <a href="{{ url_for('inventory') }}">Inventory</a>
+  <a href="{{ url_for('add') }}">Add Item</a>
+  <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="content">
+    <h3> Delete inventory item: </h3>
         <p style="color:red">Warning! This can not be undone. </p>
         <form method="post">
         <label for="deleteItem">Choose an item to delete: </label>
@@ -15,7 +76,7 @@
         </select><br><br>
         <button type="submit">Delete Item</button>
         </form>
-        <br>
-        <a href="{{ url_for('inventory') }}">Back to Inventory</a>
-    </body>
+  </div>
+
+</body>
 </html>
