@@ -347,6 +347,7 @@ def low_stock():
     
     return render_template('low_stock.html', lowStock=lowStock, outOfStock=outOfStock)
 
+
 @app.route('/delete', methods=['GET', 'POST'])
 @login_required
 def delete():
@@ -355,19 +356,18 @@ def delete():
     cursor.execute('SELECT name, item_id FROM inventory WHERE owner_id = ?',
                    (current_user.id,))
     rows = cursor.fetchall()
-    
+
     if request.method == 'POST':
-        itemToDelete = request.form['itemToDelete']
-        cursor.execute('DELETE * from inventory WHERE item_id = ?', (itemToDelete,))
+        itemToDelete = int(request.form['deleteItem'])
+        cursor.execute('DELETE from inventory WHERE item_id = ?', (itemToDelete,))
         connection.commit()
         connection.close()
         return render_template('home.html')
-    
-    
+
     items = []
     for row in rows:
         name, item_id = row
-        items.append((name,item_id))
+        items.append((name, item_id))
 
     connection.close()
     return render_template('delete.html', items=items)
