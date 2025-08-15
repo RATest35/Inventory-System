@@ -347,6 +347,32 @@ def low_stock():
     
     return render_template('low_stock.html', lowStock=lowStock, outOfStock=outOfStock)
 
+
+@app.route('/delete', methods=['GET', 'POST'])
+@login_required
+def delete():
+    connection = sqlite3.connect('inventory.db')
+    cursor = connection.cursor()
+    cursor.execute('SELECT name, item_id FROM inventory WHERE owner_id = ?',
+                   (current_user.id,))
+    rows = cursor.fetchall()
+
+    if request.method == 'POST':
+        itemToDelete = int(request.form['deleteItem'])
+        cursor.execute('DELETE from inventory WHERE item_id = ?', (itemToDelete,))
+        connection.commit()
+        connection.close()
+        return render_template('home.html')
+
+    items = []
+    for row in rows:
+        name, item_id = row
+        items.append((name, item_id))
+
+    connection.close()
+    return render_template('delete.html', items=items)
+
+
 if __name__ == '__main__':
     init_database('users')
     init_database('inventory')

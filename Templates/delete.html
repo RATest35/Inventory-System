@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        Delete Item
+    </head>
+    <body>
+        <h3> Delete inventory item: </h3>
+        <p style="color:red">Warning! This can not be undone. </p>
+        <form method="post">
+        <label for="deleteItem">Choose an item to delete: </label>
+        <select name="deleteItem" id="itemToDelete">
+            {% for item in items %}
+            <option value="{{item[1]}}">{{item[0]}}</option>
+            {% endfor %}
+        </select><br><br>
+        <button type="submit">Delete Item</button>
+        </form>
+        <br>
+        <a href="{{ url_for('inventory') }}">Back to Inventory</a>
+    </body>
+</html>
