@@ -71,12 +71,19 @@ body {
         }
         </style>
     <body>
-        <h1>Inventory</h1>
+        <h1>Inventory to xml file</h1>
         <form action="{{url_for('inventory_to_xml')}}" method="get">
             <button type="submit">Export to XML</button>
         </form>
+        <!-- XLSX export -->
+        <form action="{{ url_for('inventory_to_xlsx') }}" method="get">
+        <button type="submit">Export to XLSX</button>
+        </form>
         <br/>
         <button class="btn" type="button" onclick="window.location.href='{{ url_for('low_stock') }}';">Restock?</button><br/>
+        <br/>
+        <br/>
+        <button class="btn" type="button" onclick="window.location.href='{{ url_for('delete') }}';">Delete item?</button><br/>
         <br/>
         <table style="width:100%">
             <tr>
