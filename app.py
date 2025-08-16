@@ -377,3 +377,4 @@ if __name__ == '__main__':
     init_database('users')
     init_database('inventory')
     app.run(debug=True)
+
