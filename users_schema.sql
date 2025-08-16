@@ -1,6 +1,0 @@
-CREATE TABLE IF NOT EXISTS USERS(
-    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    user_password TEXT NOT NULL,
-    store_name TEXT NOT NULL
-);

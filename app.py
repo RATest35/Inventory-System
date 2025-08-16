@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, flash
+from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 import sqlite3
 import os
 import base64
@@ -11,18 +11,19 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, PatternFill, Font
 import tempfile
 
-
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+
 # Changed to support both databases
-def init_database(database_name):
-    with sqlite3.connect(f'{database_name}.db') as connection:
-        with open(f'{database_name}_schema.sql') as f:
+def init_database():
+    with sqlite3.connect(f'inventory.db') as connection:
+        with open(f'inventory_schema.sql') as f:
             connection.executescript(f.read())
+
 
 # User class to support flask-login.
 # Stores the values from the database in the class.
@@ -33,11 +34,10 @@ class User(UserMixin):
         self.user_password = user_password
         self.store_name = store_name
 
-
     # Function returns a User class with the values stored in the user database
     @staticmethod
     def get(user_id):
-        connection = sqlite3.connect('users.db')
+        connection = sqlite3.connect('inventory.db')
         connection.row_factory = sqlite3.Row
         cursor = connection.cursor()
         user = cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
@@ -210,9 +210,10 @@ def add():
             with sqlite3.connect('inventory.db') as items:
                 cursor = items.cursor()
                 cursor.execute('INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) \
-                            VALUES (?, ?, ?, ?, ?, ?)', (name, image_blob, description, quantity, price, current_user.id))
+                            VALUES (?, ?, ?, ?, ?, ?)',
+                               (name, image_blob, description, quantity, price, current_user.id))
                 items.commit()
-            return render_template('home.html')
+            return redirect(url_for('home'))
         except sqlite3.IntegrityError:
             flash("Item already found in inventory. Please change the name.");
             return render_template("add.html");
@@ -243,53 +244,83 @@ def inventory():
 
     return render_template('inventory.html', data=data)
 
+
 # New main page. Checks user database to see if login information exists.
 # If login information exists moves to the home page and creates a user class
-@app.route('/',  methods=['GET', 'POST'])
+@app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         user_password = request.form['user_password']
-        connection = sqlite3.connect('users.db')
+        connection = sqlite3.connect('inventory.db')
         connection.row_factory = sqlite3.Row
         cursor = connection.cursor()
-        user_row = cursor.execute('SELECT * FROM USERS WHERE username = ?', (username,)).fetchone()
+        user_row = cursor.execute('SELECT *  FROM USERS WHERE username = ?', (username,)).fetchone()
         connection.close()
         if user_row and check_password_hash(user_row['user_password'], user_password):
             user = User(user_row['user_id'], user_row['username'], user_row['user_password'], user_row['store_name'])
             login_user(user)
-            return render_template('home.html')
+            return redirect(url_for('home'))
         else:
             return render_template('login.html')
     return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    return render_template('login.html')
+    return redirect(url_for('login'))
+
 
 # Users are able to register new accounts. Usernames have to be unique and passwords are stored as a hashed password.
 # New users are stored in the database and are able to log in.
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        user_password = generate_password_hash(request.form['user_password'])
-        store_name = request.form['store_name']
-        connection = sqlite3.connect('users.db')
-        cursor = connection.cursor()
-        user_info = cursor.execute('SELECT * FROM USERS WHERE username=? AND user_password=?',
-                                   (username, user_password)).fetchone()
-        if user_info:
-            return render_template('register.html')
-        else:
-            cursor.execute('INSERT INTO USERS (username, user_password, store_name) VALUES (?, ?, ?)',
-                           (username, user_password, store_name))
-            connection.commit()
-            connection.close()
-            return render_template('login.html')
+        username = request.form['username'].strip()
+        raw_password = request.form['user_password']
+        store_name = request.form['store_name'].strip()
+
+        # Always hash once, right before storing
+        hashed_password = generate_password_hash(raw_password)
+
+        # Use a context manager to ensure commit/close happen cleanly
+        with sqlite3.connect('inventory.db') as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.cursor()
+
+            # Check for existing user by USERNAME ONLY (unique constraint handles true duplicates)
+            existing = cursor.execute(
+                'SELECT 1 FROM USERS WHERE username = ?',
+                (username,)
+            ).fetchone()
+            if existing:
+                flash('Username already taken. Please choose another.')
+                return render_template('register.html')
+
+            cursor.execute(
+                'INSERT INTO USERS (username, user_password, store_name) VALUES (?, ?, ?)',
+                (username, hashed_password, store_name)
+            )
+            # context manager will commit automatically unless an exception occurs
+
+        # Option 1: send them to login page immediately
+        # return redirect(url_for('login'))
+
+        # Option 2 (recommended UX): log them in right away after registration
+        with sqlite3.connect('inventory.db') as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.cursor()
+            row = cursor.execute(
+                'SELECT * FROM USERS WHERE username = ?',
+                (username,)
+            ).fetchone()
+
+        #
+        return redirect(url_for('login'))
+
     return render_template('register.html')
 
 
@@ -307,7 +338,7 @@ def edit_quantity(name):
         cursor.execute('UPDATE inventory SET quantity = ? WHERE name = ?', (new_quantity, name))
         conn.commit()
         conn.close()
-        return render_template('home.html')  # Or use redirect(url_for('inventory'))
+        return redirect(url_for('inventory'))
 
     # GET request
     cursor.execute('SELECT quantity FROM inventory WHERE name = ?', (name,))
@@ -320,6 +351,7 @@ def edit_quantity(name):
     else:
         return "Item not found", 404
 
+
 @app.route('/low-stock')
 @login_required
 def low_stock():
@@ -329,7 +361,7 @@ def low_stock():
                    (current_user.id,))
     rows = cursor.fetchall()
     connection.close()
-    
+
     lowStock = []
     outOfStock = []
     for row in rows:
@@ -339,12 +371,12 @@ def low_stock():
             image_uri = f"data:image/jpeg;base64,{image_base64}"
         else:
             image_uri = None  # or a default placeholder image path
-        
+
         if row[3] == 0:
             outOfStock.append((name, image_uri, description, quantity, price))
         elif row[3] <= 10:
             lowStock.append((name, image_uri, description, quantity, price))
-    
+
     return render_template('low_stock.html', lowStock=lowStock, outOfStock=outOfStock)
 
 
@@ -362,7 +394,7 @@ def delete():
         cursor.execute('DELETE from inventory WHERE item_id = ?', (itemToDelete,))
         connection.commit()
         connection.close()
-        return render_template('home.html')
+        return redirect(url_for('inventory'))
 
     items = []
     for row in rows:
@@ -374,7 +406,6 @@ def delete():
 
 
 if __name__ == '__main__':
-    init_database('users')
-    init_database('inventory')
+    init_database()
     app.run(debug=True)
 
