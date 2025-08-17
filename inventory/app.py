@@ -25,7 +25,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, PatternFill, Font
 import tempfile
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"))
 app.secret_key = os.urandom(12)
 login_manager = LoginManager()
 login_manager.init_app(app)
