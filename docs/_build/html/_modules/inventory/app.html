@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>inventory.app &#8212; Inventory Managment System 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=f2a433a1"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="canonical" href="./_modules/inventory/app.html" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for inventory.app</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Flask Inventory Management Application</span>
+
+<span class="sd">The application is a web base business inventory management system built with Flask</span>
+
+<span class="sd">Features include:</span>
+<span class="sd">    User authentication with hashed passwords</span>
+<span class="sd">    Inventory management with use of database queries (insert, delete, update)</span>
+<span class="sd">    Exporting of user items via XML and/or XLSX files</span>
+<span class="sd">    Low/No stock tracking</span>
+<span class="sd">    Image uploading</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Flask</span><span class="p">,</span> <span class="n">render_template</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">send_file</span><span class="p">,</span> <span class="n">flash</span><span class="p">,</span> <span class="n">redirect</span><span class="p">,</span> <span class="n">url_for</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sqlite3</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xml.etree.ElementTree</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ET</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">werkzeug.security</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_password_hash</span><span class="p">,</span> <span class="n">check_password_hash</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">flask_login</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoginManager</span><span class="p">,</span> <span class="n">login_user</span><span class="p">,</span> <span class="n">logout_user</span><span class="p">,</span> <span class="n">login_required</span><span class="p">,</span> <span class="n">current_user</span><span class="p">,</span> <span class="n">UserMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">openpyxl</span><span class="w"> </span><span class="kn">import</span> <span class="n">Workbook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">openpyxl.drawing.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span> <span class="k">as</span> <span class="n">XLImage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">openpyxl.styles</span><span class="w"> </span><span class="kn">import</span> <span class="n">Alignment</span><span class="p">,</span> <span class="n">PatternFill</span><span class="p">,</span> <span class="n">Font</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">template_folder</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">),</span> <span class="s2">&quot;..&quot;</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">))</span>
+<span class="n">app</span><span class="o">.</span><span class="n">secret_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">urandom</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">login_manager</span> <span class="o">=</span> <span class="n">LoginManager</span><span class="p">()</span>
+<span class="n">login_manager</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+<span class="n">login_manager</span><span class="o">.</span><span class="n">login_view</span> <span class="o">=</span> <span class="s1">&#39;login&#39;</span>
+
+
+<span class="c1"># Changed to support both databases</span>
+<div class="viewcode-block" id="init_database">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.init_database">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">init_database</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize the database using sql script from &#39;inventory_schema.sql&#39;</span>
+
+<span class="sd">    Function creates user and inventory tables if they have not been created</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;inventory_schema.sql&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">connection</span><span class="o">.</span><span class="n">executescript</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">())</span></div>
+
+
+
+
+<div class="viewcode-block" id="User">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.User">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">UserMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    User class for Flask-Login</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        id (int): User id from database</span>
+<span class="sd">        username (str): Username of account</span>
+<span class="sd">        user_password (str): User password hashed from database</span>
+<span class="sd">        store_name (str): Store name of account</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">user_password</span><span class="p">,</span> <span class="n">store_name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">user_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">username</span> <span class="o">=</span> <span class="n">username</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user_password</span> <span class="o">=</span> <span class="n">user_password</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store_name</span> <span class="o">=</span> <span class="n">store_name</span>
+
+    <span class="c1"># Function returns a User class with the values stored in the user database</span>
+<div class="viewcode-block" id="User.get">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.User.get">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve user from the database using ID</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            user_id (int): ID of user</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            User | None: An instance of User class if it exists in the database, otherwise None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">row_factory</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">Row</span>
+        <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+        <span class="n">user</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT * FROM users WHERE user_id = ?&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">user_id</span><span class="p">,))</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">user</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">User</span><span class="p">(</span><span class="n">user</span><span class="p">[</span><span class="s1">&#39;user_id&#39;</span><span class="p">],</span> <span class="n">user</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">],</span> <span class="n">user</span><span class="p">[</span><span class="s1">&#39;user_password&#39;</span><span class="p">],</span> <span class="n">user</span><span class="p">[</span><span class="s1">&#39;store_name&#39;</span><span class="p">])</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="load_user">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.load_user">[docs]</a>
+<span class="nd">@login_manager</span><span class="o">.</span><span class="n">user_loader</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Flask-login user loader</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        user_id (str): Takes the ID of a user as a string</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        User | None: An instance of User class if it exists in the database, otherwise None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">User</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">user_id</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="home">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.home">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/home&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">home</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Display the home page after login.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Response: Rendered home template.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;home.html&#39;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Converts a file to binary</span>
+<div class="viewcode-block" id="convert_to_binary">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.convert_to_binary">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_to_binary</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts a file via it&#39;s name to binary</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">         filename (str): Name of the file path to be converted to binary</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bytes: Binary of the file</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">blob_data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">blob_data</span></div>
+
+
+
+<span class="c1"># Takes the database table and downloads a xml file to the users computer</span>
+<div class="viewcode-block" id="inventory_to_xml">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.inventory_to_xml">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/xml-export&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">inventory_to_xml</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Export the current inventory to an XML file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Response: XML file download</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?&#39;</span><span class="p">,</span>
+                   <span class="p">(</span><span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,))</span>
+    <span class="c1"># Stores all the rows of the database</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+    <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Creates a tree and creates a child node (item) for each item and then adds a child node (characteristics [name,</span>
+<span class="sd">    image, quantity, etc.]) for each column in a row. The value of the characteristic is stored in the</span>
+<span class="sd">    corresponding node</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">Element</span><span class="p">(</span><span class="s1">&#39;inventory&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">item_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="s1">&#39;item&#39;</span><span class="p">)</span>
+        <span class="n">name_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">item_elmt</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">)</span>
+        <span class="n">name_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">image_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">item_elmt</span><span class="p">,</span> <span class="s1">&#39;image&#39;</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Have to check if an image is stored, for this item.</span>
+<span class="sd">        If an image is stored then have to convert from binary back into base64 </span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">image_base64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+            <span class="n">image_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="n">image_base64</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">image_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="n">description_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">item_elmt</span><span class="p">,</span> <span class="s1">&#39;description&#39;</span><span class="p">)</span>
+        <span class="n">description_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">quantity_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">item_elmt</span><span class="p">,</span> <span class="s1">&#39;quantity&#39;</span><span class="p">)</span>
+        <span class="n">quantity_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+        <span class="n">price_elmt</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">SubElement</span><span class="p">(</span><span class="n">item_elmt</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">)</span>
+        <span class="n">price_elmt</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">&#39;</span>
+
+    <span class="c1"># Sets up output file</span>
+    <span class="n">output_xml</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+    <span class="n">tree</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">output_xml</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">,</span> <span class="n">xml_declaration</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">output_xml</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">send_file</span><span class="p">(</span><span class="n">output_xml</span><span class="p">,</span> <span class="n">mimetype</span><span class="o">=</span><span class="s1">&#39;application/xml&#39;</span><span class="p">,</span> <span class="n">as_attachment</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">download_name</span><span class="o">=</span><span class="s1">&#39;inventory.xml&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="inventory_to_xlsx">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.inventory_to_xlsx">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/xlsx-export&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">inventory_to_xlsx</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Export the current inventory to an XLSX file</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">         Response: XLSX file download</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?&#39;</span><span class="p">,</span>
+                   <span class="p">(</span><span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,))</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+    <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="c1"># Create a new Excel workbook</span>
+    <span class="n">wb</span> <span class="o">=</span> <span class="n">Workbook</span><span class="p">()</span>
+    <span class="n">ws</span> <span class="o">=</span> <span class="n">wb</span><span class="o">.</span><span class="n">active</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">title</span> <span class="o">=</span> <span class="s2">&quot;Inventory&quot;</span>
+
+    <span class="c1"># Write headers</span>
+    <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Name&quot;</span><span class="p">,</span> <span class="s2">&quot;Image&quot;</span><span class="p">,</span> <span class="s2">&quot;Description&quot;</span><span class="p">,</span> <span class="s2">&quot;Quantity&quot;</span><span class="p">,</span> <span class="s2">&quot;Price&quot;</span><span class="p">]</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+
+    <span class="c1"># Style headers: bold, white text, blue fill, centered</span>
+    <span class="n">header_fill</span> <span class="o">=</span> <span class="n">PatternFill</span><span class="p">(</span><span class="n">start_color</span><span class="o">=</span><span class="s2">&quot;4F81BD&quot;</span><span class="p">,</span> <span class="n">end_color</span><span class="o">=</span><span class="s2">&quot;4F81BD&quot;</span><span class="p">,</span> <span class="n">fill_type</span><span class="o">=</span><span class="s2">&quot;solid&quot;</span><span class="p">)</span>
+    <span class="n">header_font</span> <span class="o">=</span> <span class="n">Font</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;FFFFFF&quot;</span><span class="p">,</span> <span class="n">bold</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">col_num</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">col_num</span><span class="p">)</span>
+        <span class="n">cell</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="n">header_fill</span>
+        <span class="n">cell</span><span class="o">.</span><span class="n">font</span> <span class="o">=</span> <span class="n">header_font</span>
+        <span class="n">cell</span><span class="o">.</span><span class="n">alignment</span> <span class="o">=</span> <span class="n">Alignment</span><span class="p">(</span><span class="n">horizontal</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="n">vertical</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">)</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">row_dimensions</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="mi">25</span>
+
+    <span class="c1"># Adjust column widths</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">column_dimensions</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">column_dimensions</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">15</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">column_dimensions</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">40</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">column_dimensions</span><span class="p">[</span><span class="s2">&quot;D&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">ws</span><span class="o">.</span><span class="n">column_dimensions</span><span class="p">[</span><span class="s2">&quot;E&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">10</span>
+
+    <span class="n">row_index</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">image_blob</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">description</span><span class="p">)</span>
+        <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">quantity</span><span class="p">)</span>
+        <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">price</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Center all text fields</span>
+        <span class="k">for</span> <span class="n">col_num</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]:</span>
+            <span class="n">ws</span><span class="o">.</span><span class="n">cell</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">col_num</span><span class="p">)</span><span class="o">.</span><span class="n">alignment</span> <span class="o">=</span> <span class="n">Alignment</span><span class="p">(</span><span class="n">horizontal</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="n">vertical</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">)</span>
+
+        <span class="n">ws</span><span class="o">.</span><span class="n">row_dimensions</span><span class="p">[</span><span class="n">row_index</span><span class="p">]</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="mi">60</span>  <span class="c1"># for images</span>
+
+        <span class="k">if</span> <span class="n">image_blob</span><span class="p">:</span>
+            <span class="n">temp_file</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.png&quot;</span><span class="p">)</span>
+            <span class="n">temp_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">image_blob</span><span class="p">)</span>
+            <span class="n">temp_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+            <span class="n">img</span> <span class="o">=</span> <span class="n">XLImage</span><span class="p">(</span><span class="n">temp_file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">img</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="mi">60</span>
+            <span class="n">img</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="mi">60</span>
+            <span class="n">ws</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;B</span><span class="si">{</span><span class="n">row_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">row_index</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="n">output_xlsx</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+    <span class="n">wb</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">output_xlsx</span><span class="p">)</span>
+    <span class="n">output_xlsx</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">send_file</span><span class="p">(</span>
+        <span class="n">output_xlsx</span><span class="p">,</span>
+        <span class="n">mimetype</span><span class="o">=</span><span class="s1">&#39;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet&#39;</span><span class="p">,</span>
+        <span class="n">as_attachment</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">download_name</span><span class="o">=</span><span class="s1">&#39;inventory.xlsx&#39;</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="add">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.add">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/add&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add an item to the inventory of the current user</span>
+
+<span class="sd">    GET:</span>
+<span class="sd">        Render the add item form</span>
+<span class="sd">    POST:</span>
+<span class="sd">        Insert item into inventory table</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | Response: Render template or redict to inventory page</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+        <span class="n">image_file</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">files</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">)</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;description&#39;</span><span class="p">]</span>
+        <span class="n">quantity</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;quantity&#39;</span><span class="p">])</span>
+        <span class="n">price</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;price&#39;</span><span class="p">])</span>
+        <span class="c1">#</span>
+        <span class="n">image_blob</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">image_file</span> <span class="ow">and</span> <span class="n">image_file</span><span class="o">.</span><span class="n">filename</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="c1"># Temporarily save the file to read it as binary</span>
+            <span class="n">temp_folder</span> <span class="o">=</span> <span class="s1">&#39;temp&#39;</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">temp_folder</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">temp_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">temp_folder</span><span class="p">,</span> <span class="n">image_file</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+            <span class="n">image_file</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">temp_path</span><span class="p">)</span>
+            <span class="n">image_blob</span> <span class="o">=</span> <span class="n">convert_to_binary</span><span class="p">(</span><span class="n">temp_path</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">temp_path</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">items</span><span class="p">:</span>
+                <span class="n">cursor</span> <span class="o">=</span> <span class="n">items</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;INSERT INTO INVENTORY (name, image, description, quantity, price, owner_id) </span><span class="se">\</span>
+<span class="s1">                            VALUES (?, ?, ?, ?, ?, ?)&#39;</span><span class="p">,</span>
+                               <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">image_blob</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span><span class="p">,</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+                <span class="n">items</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;home&#39;</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">IntegrityError</span><span class="p">:</span>
+            <span class="n">flash</span><span class="p">(</span><span class="s2">&quot;Item already found in inventory. Please change the name.&quot;</span><span class="p">);</span>
+            <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;add.html&quot;</span><span class="p">);</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;add.html&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="inventory">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.inventory">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/inventory&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">inventory</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Display the inventory of the current user</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: Render HTML template with current user&#39;s items</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?&#39;</span><span class="p">,</span>
+                   <span class="p">(</span><span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,))</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+    <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">image_blob</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span> <span class="o">=</span> <span class="n">row</span>
+        <span class="k">if</span> <span class="n">image_blob</span><span class="p">:</span>
+            <span class="n">image_base64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">image_blob</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+            <span class="n">image_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;data:image/jpeg;base64,</span><span class="si">{</span><span class="n">image_base64</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">image_uri</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># or a default placeholder image path</span>
+
+        <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">image_uri</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;inventory.html&#39;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># New main page. Checks user database to see if login information exists.</span>
+<span class="c1"># If login information exists moves to the home page and creates a user class</span>
+<div class="viewcode-block" id="login">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.login">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/login&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">login</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handle user login</span>
+
+<span class="sd">    GET:</span>
+<span class="sd">         Renders the login page</span>
+
+<span class="sd">    POST:</span>
+<span class="sd">        Checks inputted user info and logs them in if it exists</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | Response: Render template or redict to home page</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span>
+        <span class="n">user_password</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;user_password&#39;</span><span class="p">]</span>
+        <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">row_factory</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">Row</span>
+        <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+        <span class="n">user_row</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT *  FROM USERS WHERE username = ?&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">username</span><span class="p">,))</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">user_row</span> <span class="ow">and</span> <span class="n">check_password_hash</span><span class="p">(</span><span class="n">user_row</span><span class="p">[</span><span class="s1">&#39;user_password&#39;</span><span class="p">],</span> <span class="n">user_password</span><span class="p">):</span>
+            <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="p">(</span><span class="n">user_row</span><span class="p">[</span><span class="s1">&#39;user_id&#39;</span><span class="p">],</span> <span class="n">user_row</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">],</span> <span class="n">user_row</span><span class="p">[</span><span class="s1">&#39;user_password&#39;</span><span class="p">],</span> <span class="n">user_row</span><span class="p">[</span><span class="s1">&#39;store_name&#39;</span><span class="p">])</span>
+            <span class="n">login_user</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;home&#39;</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;login.html&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;login.html&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="logout">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.logout">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/logout&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">logout</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Logout the current user</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Response: Redirect to login page</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logout_user</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;login&#39;</span><span class="p">))</span></div>
+
+
+
+<span class="c1"># Users are able to register new accounts. Usernames have to be unique and passwords are stored as a hashed password.</span>
+<span class="c1"># New users are stored in the database and are able to log in.</span>
+<div class="viewcode-block" id="register">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.register">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/register&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handle user registration</span>
+
+<span class="sd">    GET:</span>
+<span class="sd">        Render the registration form</span>
+<span class="sd">    POST:</span>
+<span class="sd">        Insert a new user into the database with hashed password</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | Response: Rendered template or redirect response</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">raw_password</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;user_password&#39;</span><span class="p">]</span>
+        <span class="n">store_name</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;store_name&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+        <span class="c1"># Always hash once, right before storing</span>
+        <span class="n">hashed_password</span> <span class="o">=</span> <span class="n">generate_password_hash</span><span class="p">(</span><span class="n">raw_password</span><span class="p">)</span>
+
+        <span class="c1"># Use a context manager to ensure commit/close happen cleanly</span>
+        <span class="k">with</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+            <span class="n">connection</span><span class="o">.</span><span class="n">row_factory</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">Row</span>
+            <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+
+            <span class="c1"># Check for existing user by USERNAME ONLY (unique constraint handles true duplicates)</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="s1">&#39;SELECT 1 FROM USERS WHERE username = ?&#39;</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">username</span><span class="p">,)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">existing</span><span class="p">:</span>
+                <span class="n">flash</span><span class="p">(</span><span class="s1">&#39;Username already taken. Please choose another.&#39;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;register.html&#39;</span><span class="p">)</span>
+
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="s1">&#39;INSERT INTO USERS (username, user_password, store_name) VALUES (?, ?, ?)&#39;</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">hashed_password</span><span class="p">,</span> <span class="n">store_name</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># context manager will commit automatically unless an exception occurs</span>
+
+        <span class="c1"># Option 1: send them to login page immediately</span>
+        <span class="c1"># return redirect(url_for(&#39;login&#39;))</span>
+
+        <span class="c1"># Option 2 (recommended UX): log them in right away after registration</span>
+        <span class="k">with</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+            <span class="n">connection</span><span class="o">.</span><span class="n">row_factory</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">Row</span>
+            <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="s1">&#39;SELECT * FROM USERS WHERE username = ?&#39;</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">username</span><span class="p">,)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+
+        <span class="c1">#</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;login&#39;</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;register.html&#39;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Adam created this function</span>
+<span class="c1"># If the users tries to update the value a sql query is made updating the value in the database.</span>
+<span class="c1"># If a get request is sent the edit_quantity html is rendered and the item name and quantity stored in the database</span>
+<span class="c1"># is displayed.</span>
+<div class="viewcode-block" id="edit_quantity">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.edit_quantity">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/edit/&lt;string:name&gt;&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">edit_quantity</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Edit an existing inventory item.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name (str): name of the item to edit</span>
+
+<span class="sd">    GET:</span>
+<span class="sd">        Render the edit form with existing item data</span>
+<span class="sd">    POST:</span>
+<span class="sd">        Update the item in the database</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | Response: Rendered template or redirect to inventory page</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">new_quantity</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;quantity&#39;</span><span class="p">])</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;UPDATE inventory SET quantity = ? WHERE name = ?&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">new_quantity</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;inventory&#39;</span><span class="p">))</span>
+
+    <span class="c1"># GET request</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT quantity FROM inventory WHERE name = ?&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,))</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">row</span><span class="p">:</span>
+        <span class="n">current_quantity</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;edit_quantity.html&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">quantity</span><span class="o">=</span><span class="n">current_quantity</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;Item not found&quot;</span><span class="p">,</span> <span class="mi">404</span></div>
+
+
+
+<div class="viewcode-block" id="low_stock">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.low_stock">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/low-stock&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">low_stock</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Displays all items with quantity less than 11</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: Render low stock template</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?&#39;</span><span class="p">,</span>
+                   <span class="p">(</span><span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,))</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+    <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="n">lowStock</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">outOfStock</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">image_blob</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span> <span class="o">=</span> <span class="n">row</span>
+        <span class="k">if</span> <span class="n">image_blob</span><span class="p">:</span>
+            <span class="n">image_base64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">image_blob</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+            <span class="n">image_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;data:image/jpeg;base64,</span><span class="si">{</span><span class="n">image_base64</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">image_uri</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># or a default placeholder image path</span>
+
+        <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">outOfStock</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">image_uri</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">10</span><span class="p">:</span>
+            <span class="n">lowStock</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">image_uri</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">quantity</span><span class="p">,</span> <span class="n">price</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;low_stock.html&#39;</span><span class="p">,</span> <span class="n">lowStock</span><span class="o">=</span><span class="n">lowStock</span><span class="p">,</span> <span class="n">outOfStock</span><span class="o">=</span><span class="n">outOfStock</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="delete">
+<a class="viewcode-back" href="../../inventory.html#inventory.app.delete">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/delete&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">delete</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Delete an inventory item</span>
+
+<span class="sd">    GET:</span>
+<span class="sd">        Render the delete form</span>
+
+<span class="sd">    POST:</span>
+<span class="sd">        Delete the specified item</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str | Response: Rendered template or redirect to inventory page</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">connection</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;inventory.db&#39;</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT name, item_id FROM inventory WHERE owner_id = ?&#39;</span><span class="p">,</span>
+                   <span class="p">(</span><span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,))</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">itemToDelete</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;deleteItem&#39;</span><span class="p">])</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;DELETE from inventory WHERE item_id = ?&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">itemToDelete</span><span class="p">,))</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="n">url_for</span><span class="p">(</span><span class="s1">&#39;inventory&#39;</span><span class="p">))</span>
+
+    <span class="n">items</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">item_id</span> <span class="o">=</span> <span class="n">row</span>
+        <span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">item_id</span><span class="p">))</span>
+
+    <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;delete.html&#39;</span><span class="p">,</span> <span class="n">items</span><span class="o">=</span><span class="n">items</span><span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">init_database</span><span class="p">()</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">Inventory Managment System</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Adam Schwaninger, Andrew Schalley, Koi McManis, Ryan Thomas.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.3.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
