@@ -1,3 +1,17 @@
+"""
+Flask Inventory Management Application
+
+The application is a web base business inventory management system built with Flask
+
+Features include:
+    User authentication with hashed passwords
+    Inventory management with use of database queries (insert, delete, update)
+    Exporting of user items via XML and/or XLSX files
+    Low/No stock tracking
+    Image uploading
+"""
+
+
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 import sqlite3
 import os
@@ -20,14 +34,27 @@ login_manager.login_view = 'login'
 
 # Changed to support both databases
 def init_database():
+    """
+    Initialize the database using sql script from 'inventory_schema.sql'
+
+    Function creates user and inventory tables if they have not been created
+    """
     with sqlite3.connect(f'inventory.db') as connection:
         with open(f'inventory_schema.sql') as f:
             connection.executescript(f.read())
 
 
-# User class to support flask-login.
-# Stores the values from the database in the class.
+
 class User(UserMixin):
+    """
+    User class for Flask-Login
+
+    Attributes:
+        id (int): User id from database
+        username (str): Username of account
+        user_password (str): User password hashed from database
+        store_name (str): Store name of account
+    """
     def __init__(self, user_id, username, user_password, store_name):
         self.id = user_id
         self.username = username
@@ -37,6 +64,15 @@ class User(UserMixin):
     # Function returns a User class with the values stored in the user database
     @staticmethod
     def get(user_id):
+        """
+        Retrieve user from the database using ID
+
+        Args:
+            user_id (int): ID of user
+
+        Returns:
+            User | None: An instance of User class if it exists in the database, otherwise None
+        """
         connection = sqlite3.connect('inventory.db')
         connection.row_factory = sqlite3.Row
         cursor = connection.cursor()
@@ -49,16 +85,40 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
+    """
+    Flask-login user loader
+
+    Args:
+        user_id (str): Takes the ID of a user as a string
+
+    Returns:
+        User | None: An instance of User class if it exists in the database, otherwise None
+    """
     return User.get(int(user_id))
 
 
 @app.route('/home')
 def home():
+    """
+    Display the home page after login.
+
+    Returns:
+        Response: Rendered home template.
+        """
     return render_template('home.html')
 
 
 # Converts a file to binary
 def convert_to_binary(filename):
+    """
+    Converts a file via it's name to binary
+
+    Args:
+         filename (str): Name of the file path to be converted to binary
+
+    Returns:
+        bytes: Binary of the file
+    """
     with open(filename, 'rb') as f:
         blob_data = f.read()
     return blob_data
@@ -68,6 +128,12 @@ def convert_to_binary(filename):
 @app.route('/xml-export')
 @login_required
 def inventory_to_xml():
+    """
+    Export the current inventory to an XML file.
+
+    Returns:
+        Response: XML file download
+    """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
     cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
@@ -115,6 +181,12 @@ def inventory_to_xml():
 @app.route('/xlsx-export')
 @login_required
 def inventory_to_xlsx():
+    """
+    Export the current inventory to an XLSX file
+
+    Returns:
+         Response: XLSX file download
+    """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
     cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
@@ -188,6 +260,17 @@ def inventory_to_xlsx():
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add():
+    """
+    Add an item to the inventory of the current user
+
+    GET:
+        Render the add item form
+    POST:
+        Insert item into inventory table
+
+    Returns:
+        str | Response: Render template or redict to inventory page
+    """
     if request.method == 'POST':
         name = request.form['name']
         image_file = request.files.get('image')
@@ -224,6 +307,12 @@ def add():
 @app.route('/inventory')
 @login_required
 def inventory():
+    """
+    Display the inventory of the current user
+
+    Returns:
+        str: Render HTML template with current user's items
+    """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
     cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
@@ -250,6 +339,18 @@ def inventory():
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """
+    Handle user login
+
+    GET:
+         Renders the login page
+
+    POST:
+        Checks inputted user info and logs them in if it exists
+
+    Returns:
+        str | Response: Render template or redict to home page
+    """
     if request.method == 'POST':
         username = request.form['username']
         user_password = request.form['user_password']
@@ -270,6 +371,12 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    """
+    Logout the current user
+
+    Returns:
+        Response: Redirect to login page
+    """
     logout_user()
     return redirect(url_for('login'))
 
@@ -278,6 +385,17 @@ def logout():
 # New users are stored in the database and are able to log in.
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    """
+    Handle user registration
+
+    GET:
+        Render the registration form
+    POST:
+        Insert a new user into the database with hashed password
+
+    Returns:
+        str | Response: Rendered template or redirect response
+    """
     if request.method == 'POST':
         username = request.form['username'].strip()
         raw_password = request.form['user_password']
@@ -330,6 +448,20 @@ def register():
 # is displayed.
 @app.route('/edit/<string:name>', methods=['GET', 'POST'])
 def edit_quantity(name):
+    """
+    Edit an existing inventory item.
+
+    Args:
+        name (str): name of the item to edit
+
+    GET:
+        Render the edit form with existing item data
+    POST:
+        Update the item in the database
+
+    Returns:
+        str | Response: Rendered template or redirect to inventory page
+    """
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
 
@@ -355,6 +487,12 @@ def edit_quantity(name):
 @app.route('/low-stock')
 @login_required
 def low_stock():
+    """
+    Displays all items with quantity less than 11
+
+    Returns:
+        str: Render low stock template
+    """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
     cursor.execute('SELECT name, image, description, quantity, price FROM inventory WHERE owner_id = ?',
@@ -383,6 +521,18 @@ def low_stock():
 @app.route('/delete', methods=['GET', 'POST'])
 @login_required
 def delete():
+    """
+    Delete an inventory item
+
+    GET:
+        Render the delete form
+
+    POST:
+        Delete the specified item
+
+    Returns:
+        str | Response: Rendered template or redirect to inventory page
+    """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
     cursor.execute('SELECT name, item_id FROM inventory WHERE owner_id = ?',
