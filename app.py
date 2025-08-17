@@ -1,3 +1,17 @@
+"""
+Flask Inventory Management Application
+
+The application is a web base business inventory management system built with Flask
+
+Features include:
+    User authentication with hashed passwords
+    Inventory management with use of database queries (insert, delete, update)
+    Exporting of user items via XML and/or XLSX files
+    Low/No stock tracking
+    Image uploading
+"""
+
+
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 import sqlite3
 import os
@@ -20,14 +34,27 @@ login_manager.login_view = 'login'
 
 # Changed to support both databases
 def init_database():
+    """
+    Initialize the database using sql script from 'inventory_schema.sql'
+
+    Function creates user and inventory tables if they have not been created
+    """
     with sqlite3.connect(f'inventory.db') as connection:
         with open(f'inventory_schema.sql') as f:
             connection.executescript(f.read())
 
 
-# User class to support flask-login.
-# Stores the values from the database in the class.
+
 class User(UserMixin):
+    """
+    User class for Flask-Login
+
+    Attributes:
+        id (int): User id from database
+        username (str): Username of account
+        user_password (str): User password hashed from database
+        store_name (str): Store name of account
+    """
     def __init__(self, user_id, username, user_password, store_name):
         self.id = user_id
         self.username = username
@@ -37,6 +64,15 @@ class User(UserMixin):
     # Function returns a User class with the values stored in the user database
     @staticmethod
     def get(user_id):
+        """
+        Retrieve user from the database using ID
+
+        Args:
+            user_id (int): ID of user
+
+        Returns:
+            User | None: An instance of User class if it exists in the database, otherwise None
+        """
         connection = sqlite3.connect('inventory.db')
         connection.row_factory = sqlite3.Row
         cursor = connection.cursor()
@@ -49,6 +85,15 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
+    """
+    Flask-login user loader
+
+    Args:
+        user_id (str): Takes the ID of a user as a string
+
+    Returns:
+        User | None: An instance of User class if it exists in the database, otherwise None
+    """
     return User.get(int(user_id))
 
 
