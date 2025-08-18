@@ -10,7 +10,7 @@ Features include:
     Low/No stock tracking
     Image uploading
 """
-#testing github actions
+
 
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 import sqlite3
