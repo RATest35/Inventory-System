@@ -25,7 +25,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, PatternFill, Font
 import tempfile
 
-app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"))
+app = Flask(__name__)
 app.secret_key = os.urandom(12)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -524,14 +524,8 @@ def delete():
     """
     Delete an inventory item
 
-    GET:
-        Render the delete form
-
-    POST:
-        Delete the specified item
-
     Returns:
-        str | Response: Rendered template or redirect to inventory page
+        Response: Redirect to inventory page
     """
     connection = sqlite3.connect('inventory.db')
     cursor = connection.cursor()
