@@ -41,3 +41,5 @@ Easy no/low stock viewing
 UI improvement
 
 Various bug fixes
+
+Selenium Testing
