@@ -436,7 +436,7 @@ def register():
                 (username,)
             ).fetchone()
 
-        #
+        #test
         return redirect(url_for('login'))
 
     return render_template('register.html')
