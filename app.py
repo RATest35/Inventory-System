@@ -436,7 +436,12 @@ def register():
                 (username,)
             ).fetchone()
 
-        #test
+        if row:
+            user = User(row['user_id'], row['username'], row['user_password'], row['store_name'])
+            login_user(user)
+            return render_template('home.html')
+
+        # Fallback
         return redirect(url_for('login'))
 
     return render_template('register.html')
