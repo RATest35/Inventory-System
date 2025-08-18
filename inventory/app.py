@@ -412,7 +412,7 @@ def register():
             # Check for existing user by USERNAME ONLY (unique constraint handles true duplicates)
             existing = cursor.execute(
                 'SELECT 1 FROM USERS WHERE username = ?',
-                (username,)
+                (username)
             ).fetchone()
             if existing:
                 flash('Username already taken. Please choose another.')
